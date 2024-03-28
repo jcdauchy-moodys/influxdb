@@ -342,7 +342,7 @@ LOOP:
 		if !ctx.Quiet {
 			// If query = SHOW DATABASES, we ignore it
 			s := stmt.String()
-			e.Logger.Info("JCD stmt:", s)
+			e.Logger.Error(fmt.Sprintf("JCD stmt: %s", s))
 			if ( stmt.String() != "SHOW DATABASES" ) {
 			    e.Logger.Info("Executing query", zap.Stringer("query", stmt))
 			}
