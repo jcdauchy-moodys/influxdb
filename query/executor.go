@@ -341,7 +341,8 @@ LOOP:
 		// Log each normalized statement.
 		if !ctx.Quiet {
 			// If query = SHOW DATABASES, we ignore it
-			fmt.Printf("JCD stmt: '%s'\n", stmt.String())
+			s := stmt.String()
+			e.Logger.Info("JCD stmt:", s)
 			if ( stmt.String() != "SHOW DATABASES" ) {
 			    e.Logger.Info("Executing query", zap.Stringer("query", stmt))
 			}
