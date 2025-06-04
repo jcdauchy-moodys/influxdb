@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "influxdb_alerts.yml"
+
+scrape_configs:
+  - job_name: 'influxdb'
+    static_configs:
+      - targets: ['localhost:8086']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    # Uncomment if authentication is enabled:
+    # basic_auth:
+    #   username: 'your-username'
+    #   password: 'your-password'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093 

@@ -31,6 +31,7 @@ import (
 	"github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/coordinator"
 	"github.com/influxdata/influxdb/logger"
+	"github.com/influxdata/influxdb/metrics"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/monitor"
 	"github.com/influxdata/influxdb/monitor/diagnostics"
@@ -155,7 +156,7 @@ func NewHandler(c Config) *Handler {
 		mux:            pat.New(),
 		Config:         &c,
 		Logger:         zap.NewNop(),
-		CLFLogger:      log.New(os.Stderr, "[httpd] ", 0),
+		CLFLogger:      log.New(os.Stderr, "", 0),
 		stats:          &Statistics{},
 		requestTracker: NewRequestTracker(),
 	}
@@ -311,7 +312,7 @@ func (h *Handler) Open() {
 				h.Logger.Error("unable to open access log, falling back to stderr", zap.Error(err), zap.String("path", h.Config.AccessLogPath))
 				return
 			}
-			h.CLFLogger = log.New(f, "", 0) // [httpd] prefix stripped when logging to a file
+			h.CLFLogger = log.New(f, "", 0) // logfmt compatible output without prefix
 			h.accessLog = f
 			path = h.Config.AccessLogPath
 		}
@@ -327,6 +328,9 @@ func (h *Handler) Open() {
 		h.registered = true
 		prom.MustRegister(h.Controller.PrometheusCollectors()...)
 	}
+
+	// Register InfluxDB metrics with Prometheus
+	metrics.RegisterInfluxDBCollector(h.stats)
 }
 
 func (h *Handler) Close() {
@@ -815,7 +819,6 @@ func (h *Handler) async(q *influxql.Query, results <-chan *query.Result) {
 // in the database URL query value.  It is encoded using a forward slash like
 // "database/retentionpolicy" and we should be able to simply split that string
 // on the forward slash.
-//
 func bucket2dbrp(bucket string) (string, string, error) {
 	// test for a slash in our bucket name.
 	switch idx := strings.IndexByte(bucket, '/'); idx {

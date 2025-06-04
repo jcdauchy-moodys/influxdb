@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -74,11 +73,8 @@ func redactPassword(r *http.Request) {
 
 // Common Log Format: http://en.wikipedia.org/wiki/Common_Log_Format
 
-// buildLogLine creates a common log format
-// in addition to the common fields, we also append referrer, user agent,
-// request ID and response time (microseconds)
-// ie, in apache mod_log_config terms:
-//     %h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" %L %D
+// buildLogLine creates a logfmt formatted log line
+// This matches the existing InfluxDB logging format style
 func buildLogLine(l *responseLogger, r *http.Request, start time.Time) string {
 
 	redactPassword(r)
@@ -96,61 +92,64 @@ func buildLogLine(l *responseLogger, r *http.Request, start time.Time) string {
 	}
 
 	uri := r.URL.RequestURI()
-
 	referer := r.Referer()
-
 	userAgent := r.UserAgent()
+	requestID := r.Header.Get("Request-Id")
+	durationMicros := int64(time.Since(start) / time.Microsecond)
 
-	allKeyValues := make([]string, 0, len(r.PostForm))
-	if r.Method == "POST" {
+	// Generate a log_id similar to InfluxDB's format (simplified version)
+	// In a real implementation, this should use the same ID generator as the main logger
+	logID := fmt.Sprintf("httpd_%s", requestID[len(requestID)-8:]) // Use last 8 chars of request ID
+
+	// Build logfmt formatted string matching InfluxDB style
+	logParts := []string{
+		fmt.Sprintf("ts=%s", start.Format("2006-01-02T15:04:05.000000Z")),
+		"lvl=debug",
+		fmt.Sprintf("msg=\"HTTP request\""),
+		fmt.Sprintf("log_id=%s", logID),
+		"service=httpd",
+		fmt.Sprintf("client_ip=%s", host),
+		fmt.Sprintf("method=%s", r.Method),
+		fmt.Sprintf("path=%s", uri),
+		fmt.Sprintf("protocol=%q", r.Proto),
+		fmt.Sprintf("status=%d", l.Status()),
+		fmt.Sprintf("response_size=%d", l.Size()),
+		fmt.Sprintf("duration_us=%d", durationMicros),
+	}
+
+	// Add optional fields only if they have values
+	if username != "" {
+		logParts = append(logParts, fmt.Sprintf("username=%s", username))
+	}
+	if referer != "" {
+		logParts = append(logParts, fmt.Sprintf("referer=%q", referer))
+	}
+	if userAgent != "" {
+		logParts = append(logParts, fmt.Sprintf("user_agent=%q", userAgent))
+	}
+	if requestID != "" {
+		logParts = append(logParts, fmt.Sprintf("request_id=%s", requestID))
+	}
+
+	// Handle POST form data if present
+	if r.Method == "POST" && len(r.PostForm) > 0 {
+		formFields := make([]string, 0, len(r.PostForm))
 		for k, values := range r.PostForm {
 			if k == "p" || k == "P" {
-				// Note: if there are multiple "p" values, they are all replaced by a single "[REDACTED]".
+				// Redact password fields
 				r.PostForm.Set(k, "[REDACTED]")
 				values = r.PostForm[k]
 			}
-			valuesSlice := make([]string, 0, len(values))
-			for _, v := range values {
-				valuesSlice = append(valuesSlice, fmt.Sprintf("'%s'", v))
-			}
-			joined := strings.Join(valuesSlice, ", ")
-			allKeyValues = append(allKeyValues, fmt.Sprintf("{'%s': %s}", k, joined))
+			// Join multiple values with comma
+			joined := strings.Join(values, ",")
+			formFields = append(formFields, fmt.Sprintf("%s=%s", k, joined))
 		}
-
-		return fmt.Sprintf(`%s - %s [%s] "%s %s %s %s" %s %s "%s" "%s" %s %d`,
-			host,
-			detect(username, "-"),
-			start.Format("02/Jan/2006:15:04:05 -0700"),
-			r.Method,
-			uri,
-			r.Proto,
-			strings.Join(allKeyValues, ", "),
-			detect(strconv.Itoa(l.Status()), "-"),
-			strconv.Itoa(l.Size()),
-			detect(referer, "-"),
-			detect(userAgent, "-"),
-			r.Header.Get("Request-Id"),
-			// response time, report in microseconds because this is consistent
-			// with apache's %D parameter in mod_log_config
-			int64(time.Since(start)/time.Microsecond))
-
-	} else {
-		return fmt.Sprintf(`%s - %s [%s] "%s %s %s" %s %s "%s" "%s" %s %d`,
-			host,
-			detect(username, "-"),
-			start.Format("02/Jan/2006:15:04:05 -0700"),
-			r.Method,
-			uri,
-			r.Proto,
-			detect(strconv.Itoa(l.Status()), "-"),
-			strconv.Itoa(l.Size()),
-			detect(referer, "-"),
-			detect(userAgent, "-"),
-			r.Header.Get("Request-Id"),
-			// response time, report in microseconds because this is consistent
-			// with apache's %D parameter in mod_log_config
-			int64(time.Since(start)/time.Microsecond))
+		if len(formFields) > 0 {
+			logParts = append(logParts, fmt.Sprintf("form_data=%q", strings.Join(formFields, "&")))
+		}
 	}
+
+	return strings.Join(logParts, " ")
 }
 
 // detect detects the first presence of a non blank string and returns it

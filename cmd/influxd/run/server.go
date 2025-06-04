@@ -17,6 +17,7 @@ import (
 	"github.com/influxdata/influxdb/coordinator"
 	"github.com/influxdata/influxdb/flux/control"
 	"github.com/influxdata/influxdb/logger"
+	"github.com/influxdata/influxdb/metrics"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/monitor"
 	"github.com/influxdata/influxdb/query"
@@ -378,7 +379,7 @@ func (s *Server) Err() <-chan error { return s.err }
 
 // Open opens the meta and data store and all services.
 func (s *Server) Open() error {
-	// Start profiling if requested.
+	// Start profiling, if set.
 	if err := s.startProfile(); err != nil {
 		return err
 	}
@@ -445,14 +446,20 @@ func (s *Server) Open() error {
 		return fmt.Errorf("open tsdb store: %s", err)
 	}
 
-	// Open the subscriber service
-	if err := s.Subscriber.Open(); err != nil {
-		return fmt.Errorf("open subscriber: %s", err)
-	}
+	// Open the query executor.
+	// Note: query.Executor doesn't have an Open method in this version
+	// if err := s.QueryExecutor.Open(); err != nil {
+	// 	return fmt.Errorf("open query executor: %s", err)
+	// }
 
 	// Open the points writer service
 	if err := s.PointsWriter.Open(); err != nil {
 		return fmt.Errorf("open points writer: %s", err)
+	}
+
+	// Open the subscriber service
+	if err := s.Subscriber.Open(); err != nil {
+		return fmt.Errorf("open subscriber service: %s", err)
 	}
 
 	s.PointsWriter.AddWriteSubscriber(s.Subscriber.Points())
@@ -467,6 +474,12 @@ func (s *Server) Open() error {
 	if !s.reportingDisabled {
 		go s.startServerReporting()
 	}
+
+	// Initialize Prometheus metrics with server info
+	metrics.SetInfo(s.buildInfo.Version, s.buildInfo.Commit, s.buildInfo.Branch, s.buildInfo.Time)
+
+	// Start metrics update goroutine
+	go s.updateMetrics()
 
 	return nil
 }
@@ -659,4 +672,65 @@ func raftDBExists(dir string) error {
 		return fmt.Errorf("detected %s. To proceed, you'll need to either 1) downgrade to v0.11.x, export your metadata, upgrade to the current version again, and then import the metadata or 2) delete the file, which will effectively reset your database. For more assistance with the upgrade, see: https://docs.influxdata.com/influxdb/v0.12/administration/upgrading/", raftFile)
 	}
 	return nil
+}
+
+// updateMetrics periodically updates system and runtime metrics
+func (s *Server) updateMetrics() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.updateSystemMetrics()
+		case <-s.closing:
+			return
+		}
+	}
+}
+
+// updateSystemMetrics updates runtime and system metrics
+func (s *Server) updateSystemMetrics() {
+	// Update uptime
+	metrics.UpdateUptime()
+
+	// Get runtime memory stats
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	// Update memory metrics
+	metrics.SetMemoryUsage("heap_alloc", int64(memStats.HeapAlloc))
+	metrics.SetMemoryUsage("heap_sys", int64(memStats.HeapSys))
+	metrics.SetMemoryUsage("heap_idle", int64(memStats.HeapIdle))
+	metrics.SetMemoryUsage("heap_in_use", int64(memStats.HeapInuse))
+	metrics.SetMemoryUsage("heap_released", int64(memStats.HeapReleased))
+	metrics.SetMemoryUsage("stack_in_use", int64(memStats.StackInuse))
+	metrics.SetMemoryUsage("stack_sys", int64(memStats.StackSys))
+	metrics.SetMemoryUsage("sys", int64(memStats.Sys))
+
+	// Update database-specific metrics if TSDBStore is available
+	if s.TSDBStore != nil {
+		// Get databases
+		databases := s.MetaClient.Databases()
+
+		for _, db := range databases {
+			dbName := db.Name
+
+			// Update shard count for each retention policy
+			for _, rp := range db.RetentionPolicies {
+				shardCount := len(rp.ShardGroups)
+				metrics.SetShardCount(dbName, rp.Name, int64(shardCount))
+			}
+
+			// Get store statistics for the database
+			stats := s.TSDBStore.Statistics(map[string]string{"database": dbName})
+			for _, stat := range stats {
+				if stat.Name == "database" {
+					if seriesCount, ok := stat.Values["numSeries"].(int64); ok {
+						metrics.SetSeriesCount(dbName, seriesCount)
+					}
+				}
+			}
+		}
+	}
 }

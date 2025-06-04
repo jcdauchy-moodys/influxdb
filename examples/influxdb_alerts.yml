@@ -1,0 +1,74 @@
+groups:
+  - name: influxdb_alerts
+    rules:
+      - alert: InfluxDBDown
+        expr: up{job="influxdb"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "InfluxDB instance is down"
+          description: "InfluxDB instance {{ $labels.instance }} has been down for more than 5 minutes."
+
+      - alert: InfluxDBHighErrorRate
+        expr: rate(influxdb_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfluxDB has high error rate"
+          description: "InfluxDB error rate is {{ $value }} errors/second on instance {{ $labels.instance }}"
+
+      - alert: InfluxDBHighMemoryUsage
+        expr: influxdb_memory_usage_bytes{component="heap_in_use"} > 1073741824  # 1GB
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfluxDB high memory usage"
+          description: "InfluxDB heap usage is {{ $value | humanizeBytes }} on instance {{ $labels.instance }}"
+
+      - alert: InfluxDBSlowQueries
+        expr: histogram_quantile(0.95, rate(influxdb_query_request_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfluxDB slow queries detected"
+          description: "95th percentile query duration is {{ $value }}s on instance {{ $labels.instance }}"
+
+      - alert: InfluxDBHighWriteFailureRate
+        expr: rate(influxdb_points_written_total{status="fail"}[5m]) / rate(influxdb_points_written_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "InfluxDB high write failure rate"
+          description: "{{ $value | humanizePercentage }} of writes are failing on instance {{ $labels.instance }}"
+
+      - alert: InfluxDBHighAuthFailureRate
+        expr: rate(influxdb_auth_failures_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfluxDB high authentication failure rate"
+          description: "Authentication failure rate is {{ $value }} failures/second on instance {{ $labels.instance }}"
+
+      - alert: InfluxDBHighSeriesCardinality
+        expr: influxdb_series_count > 1000000  # 1 million series
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfluxDB high series cardinality"
+          description: "Database {{ $labels.database }} has {{ $value }} series, which may impact performance"
+
+      - alert: InfluxDBSlowCompactions
+        expr: histogram_quantile(0.95, rate(influxdb_tsm_compaction_duration_seconds_bucket[5m])) > 300  # 5 minutes
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfluxDB slow compactions"
+          description: "95th percentile compaction duration is {{ $value }}s for database {{ $labels.database }}" 
