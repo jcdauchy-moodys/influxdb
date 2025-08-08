@@ -96,7 +96,10 @@ func (c *CommandLine) Run() error {
 		return errors.New("unable to prompt for a password with no TTY")
 	}
 
-	// Read environment variables for username/password.
+	// Read environment variables for username/password/JWT.
+	if c.ClientConfig.JWT == "" {
+		c.ClientConfig.JWT = os.Getenv("INFLUX_JWT")
+	}
 	if c.ClientConfig.Username == "" {
 		c.ClientConfig.Username = os.Getenv("INFLUX_USERNAME")
 	}
@@ -410,6 +413,9 @@ func (c *CommandLine) SetAuth(cmd string) {
 
 	// Update the client as well
 	c.Client.SetAuth(c.ClientConfig.Username, c.ClientConfig.Password)
+	if c.ClientConfig.JWT != "" {
+		c.Client.SetJWT(c.ClientConfig.JWT)
+	}
 }
 
 func (c *CommandLine) clear(cmd string) {

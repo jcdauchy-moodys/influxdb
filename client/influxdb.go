@@ -127,6 +127,7 @@ type Config struct {
 	UnixSocket       string
 	Username         string
 	Password         string
+	JWT              string
 	UserAgent        string
 	Timeout          time.Duration
 	Precision        string
@@ -149,6 +150,7 @@ type Client struct {
 	unixSocket string
 	username   string
 	password   string
+	jwt        string
 	httpClient *http.Client
 	userAgent  string
 	precision  string
@@ -195,6 +197,7 @@ func NewClient(c Config) (*Client, error) {
 		unixSocket: c.UnixSocket,
 		username:   c.Username,
 		password:   c.Password,
+		jwt:        c.JWT,
 		httpClient: &http.Client{Timeout: c.Timeout, Transport: tr},
 		userAgent:  c.UserAgent,
 		precision:  c.Precision,
@@ -209,6 +212,11 @@ func NewClient(c Config) (*Client, error) {
 func (c *Client) SetAuth(u, p string) {
 	c.username = u
 	c.password = p
+}
+
+// SetJWT will update the JWT token
+func (c *Client) SetJWT(jwt string) {
+	c.jwt = jwt
 }
 
 // SetPrecision will update the precision
@@ -252,7 +260,9 @@ func (c *Client) QueryContext(ctx context.Context, q Query) (*Response, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwt != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwt)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 
@@ -344,7 +354,9 @@ func (c *Client) Write(bp BatchPoints) (*Response, error) {
 	}
 	req.Header.Set("Content-Type", "")
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwt != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwt)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 
@@ -396,7 +408,9 @@ func (c *Client) WriteLineProtocol(data, database, retentionPolicy, precision, w
 	}
 	req.Header.Set("Content-Type", "")
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwt != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwt)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 	params := req.URL.Query()
@@ -440,7 +454,9 @@ func (c *Client) Ping() (time.Duration, string, error) {
 		return 0, "", err
 	}
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwt != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwt)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 

@@ -337,6 +337,73 @@ func TestClient_BasicAuth(t *testing.T) {
 	}
 }
 
+func TestClient_JWTAuth(t *testing.T) {
+	expectedToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		expectedAuth := "Bearer " + expectedToken
+
+		if authHeader != expectedAuth {
+			t.Errorf("unexpected Authorization header, expected %q, actual %q", expectedAuth, authHeader)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	config := client.Config{URL: *u, JWT: expectedToken}
+	c, err := client.NewClient(config)
+	if err != nil {
+		t.Fatalf("unexpected error.  expected %v, actual %v", nil, err)
+	}
+
+	_, _, err = c.Ping()
+	if err != nil {
+		t.Fatalf("unexpected error.  expected %v, actual %v", nil, err)
+	}
+}
+
+func TestClient_JWTPrecedenceOverBasicAuth(t *testing.T) {
+	expectedToken := "jwt.token.value"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		expectedAuth := "Bearer " + expectedToken
+
+		// Verify JWT is used instead of basic auth
+		if authHeader != expectedAuth {
+			t.Errorf("unexpected Authorization header, expected %q, actual %q", expectedAuth, authHeader)
+		}
+
+		// Verify basic auth is not used when JWT is present
+		_, _, hasBasicAuth := r.BasicAuth()
+		if hasBasicAuth {
+			t.Error("basic auth should not be used when JWT is present")
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	config := client.Config{
+		URL:      *u,
+		JWT:      expectedToken,
+		Username: "user",     // These should be ignored
+		Password: "password", // when JWT is present
+	}
+	c, err := client.NewClient(config)
+	if err != nil {
+		t.Fatalf("unexpected error.  expected %v, actual %v", nil, err)
+	}
+
+	_, _, err = c.Ping()
+	if err != nil {
+		t.Fatalf("unexpected error.  expected %v, actual %v", nil, err)
+	}
+}
+
 func TestClient_Write(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		in, err := ioutil.ReadAll(r.Body)

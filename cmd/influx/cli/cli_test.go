@@ -115,6 +115,32 @@ func TestSetAuth(t *testing.T) {
 	}
 }
 
+func TestSetJWT(t *testing.T) {
+	t.Parallel()
+	c := cli.New(CLIENT_VERSION)
+	config := client.NewConfig()
+	client, _ := client.NewClient(config)
+	c.Client = client
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ"
+
+	// Set JWT in ClientConfig directly (simulating command line flag)
+	c.ClientConfig.JWT = token
+
+	// Test with credentials provided to avoid interactive prompt
+	c.SetAuth("auth testuser testpass")
+
+	// validate CLI configuration
+	if c.ClientConfig.JWT != token {
+		t.Fatalf("JWT is %s but should be %s", c.ClientConfig.JWT, token)
+	}
+	if c.ClientConfig.Username != "testuser" {
+		t.Fatalf("Username is %s but should be %s", c.ClientConfig.Username, "testuser")
+	}
+	if c.ClientConfig.Password != "testpass" {
+		t.Fatalf("Password is %s but should be %s", c.ClientConfig.Password, "testpass")
+	}
+}
+
 func TestSetPrecision(t *testing.T) {
 	t.Parallel()
 	c := cli.New(CLIENT_VERSION)

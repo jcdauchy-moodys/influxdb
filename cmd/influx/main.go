@@ -45,6 +45,7 @@ func main() {
 	fs.StringVar(&c.ClientConfig.UnixSocket, "socket", "", "Influxdb unix socket to connect to.")
 	fs.StringVar(&c.ClientConfig.Username, "username", "", "Username to connect to the server.")
 	fs.StringVar(&c.ClientConfig.Password, "password", "", `Password to connect to the server.  Leaving blank will prompt for password (--password="").`)
+	fs.StringVar(&c.ClientConfig.JWT, "jwt", "", "JWT token to connect to the server (takes precedence over username/password).")
 	fs.StringVar(&c.Database, "database", c.Database, "Database to connect to the server.")
 	fs.Var(&c.Type, "type", "query language for executing commands or invoking the REPL: influxql, flux")
 	fs.BoolVar(&c.Ssl, "ssl", false, "Use https for connecting to cluster.")
@@ -78,6 +79,8 @@ func main() {
 			Database to connect to the server.
   -password 'password'
 			Password to connect to the server.  Leaving blank will prompt for password (--password '').
+  -jwt 'jwt_token'
+			JWT token to connect to the server (takes precedence over username/password).
   -username 'username'
 			Username to connect to the server.
   -ssl
@@ -111,7 +114,14 @@ Examples:
     $ influx -database 'metrics' -execute 'select * from cpu' -format 'json' -pretty
 
     # Connect to a specific database on startup and set database context:
-    $ influx -database 'metrics' -host 'localhost' -port '8086'`)
+    $ influx -database 'metrics' -host 'localhost' -port '8086'
+
+    # Connect using JWT authentication:
+    $ influx -jwt 'your.jwt.token' -database 'metrics'
+
+    # Connect using JWT from environment variable:
+    $ export INFLUX_JWT="your.jwt.token"
+    $ influx -database 'metrics'`)
 	}
 	fs.Parse(os.Args[1:])
 
