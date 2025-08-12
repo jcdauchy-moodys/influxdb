@@ -292,6 +292,8 @@ func (c *CommandLine) ParseCommand(cmd string) error {
 			return c.Connect(cmd)
 		case "auth":
 			c.SetAuth(cmd)
+		case "jwt":
+			c.SetJWT(cmd)
 		case "help":
 			c.help()
 		case "history":
@@ -411,6 +413,26 @@ func (c *CommandLine) SetAuth(cmd string) {
 	c.Client.SetAuth(c.ClientConfig.Username, c.ClientConfig.Password)
 }
 
+// SetJWT sets client JWT token.
+func (c *CommandLine) SetJWT(cmd string) {
+	// If they pass in the entire command, we should parse it
+	// jwt <token>
+	args := strings.Fields(cmd)
+	if len(args) == 2 {
+		c.ClientConfig.JWTToken = args[1]
+	} else {
+		token, e := c.Line.Prompt("JWT token: ")
+		if e != nil {
+			fmt.Printf("Unable to process input: %s", e)
+			return
+		}
+		c.ClientConfig.JWTToken = strings.TrimSpace(token)
+	}
+
+	// Update the client as well
+	c.Client.SetJWTToken(c.ClientConfig.JWTToken)
+}
+
 func (c *CommandLine) clear(cmd string) {
 	args := strings.Split(strings.TrimSuffix(strings.TrimSpace(cmd), ";"), " ")
 	v := strings.ToLower(strings.Join(args[1:], " "))
@@ -422,6 +444,11 @@ func (c *CommandLine) clear(cmd string) {
 	case "retention policy", "rp":
 		c.RetentionPolicy = ""
 		fmt.Println("retention policy context cleared")
+		return
+	case "jwt", "token":
+		c.ClientConfig.JWTToken = ""
+		c.Client.SetJWTToken("")
+		fmt.Println("JWT token cleared")
 		return
 	default:
 		if len(args) > 1 {
@@ -435,6 +462,10 @@ func (c *CommandLine) clear(cmd string) {
     # Clear the retention policy context
     clear retention policy
     clear rp
+
+    # Clear the JWT token
+    clear jwt
+    clear token
 		`)
 	}
 }
@@ -1042,6 +1073,11 @@ func (c *CommandLine) Settings() {
 	fmt.Fprintln(w, "--------\t--------")
 	fmt.Fprintf(w, "URL\t%s\n", c.URL.String())
 	fmt.Fprintf(w, "Username\t%s\n", c.ClientConfig.Username)
+	if c.ClientConfig.JWTToken != "" {
+		fmt.Fprintf(w, "JWT Token\t%s\n", "***set***")
+	} else {
+		fmt.Fprintf(w, "JWT Token\t%s\n", "")
+	}
 	fmt.Fprintf(w, "Database\t%s\n", c.Database)
 	fmt.Fprintf(w, "RetentionPolicy\t%s\n", c.RetentionPolicy)
 	fmt.Fprintf(w, "Pretty\t%v\n", c.Pretty)
@@ -1057,6 +1093,7 @@ func (c *CommandLine) help() {
 	fmt.Println(`Usage:
         connect <host:port>   connects to another node specified by host:port
         auth                  prompts for username and password
+        jwt <token>           sets JWT token for authorization (or prompt if no token provided)
         pretty                toggles pretty print for the json format
         chunked               turns on chunked responses from server
         chunk size <size>     sets the size of the chunked responses.  Set to 0 to reset to the default chunked size

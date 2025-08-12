@@ -119,6 +119,7 @@ func ParseConnectionString(path string, ssl bool) (url.URL, error) {
 // Config is used to specify what server to connect to.
 // URL: The URL of the server connecting to.
 // Username/Password are optional. They will be passed via basic auth if provided.
+// JWTToken: If provided, will be passed via Authorization header as Bearer token.
 // UserAgent: If not provided, will default "InfluxDBClient",
 // Timeout: If not provided, will default to 0 (no timeout)
 type Config struct {
@@ -126,6 +127,7 @@ type Config struct {
 	UnixSocket       string
 	Username         string
 	Password         string
+	JWTToken         string
 	UserAgent        string
 	Timeout          time.Duration
 	Precision        string
@@ -148,6 +150,7 @@ type Client struct {
 	unixSocket string
 	username   string
 	password   string
+	jwtToken   string
 	httpClient *http.Client
 	userAgent  string
 	precision  string
@@ -194,6 +197,7 @@ func NewClient(c Config) (*Client, error) {
 		unixSocket: c.UnixSocket,
 		username:   c.Username,
 		password:   c.Password,
+		jwtToken:   c.JWTToken,
 		httpClient: &http.Client{Timeout: c.Timeout, Transport: tr},
 		userAgent:  c.UserAgent,
 		precision:  c.Precision,
@@ -208,6 +212,11 @@ func NewClient(c Config) (*Client, error) {
 func (c *Client) SetAuth(u, p string) {
 	c.username = u
 	c.password = p
+}
+
+// SetJWTToken will update the JWT token
+func (c *Client) SetJWTToken(token string) {
+	c.jwtToken = token
 }
 
 // SetPrecision will update the precision
@@ -251,7 +260,9 @@ func (c *Client) QueryContext(ctx context.Context, q Query) (*Response, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwtToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwtToken)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 
@@ -319,7 +330,9 @@ func (c *Client) QueryFlux(ctx context.Context, query *fluxClient.QueryRequest) 
 	}
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", "application/json")
-	if c.username != "" {
+	if c.jwtToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwtToken)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 	req = req.WithContext(ctx)
@@ -379,7 +392,9 @@ func (c *Client) Write(bp BatchPoints) (*Response, error) {
 	}
 	req.Header.Set("Content-Type", "")
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwtToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwtToken)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 
@@ -431,7 +446,9 @@ func (c *Client) WriteLineProtocol(data, database, retentionPolicy, precision, w
 	}
 	req.Header.Set("Content-Type", "")
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwtToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwtToken)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 	params := req.URL.Query()
@@ -475,7 +492,9 @@ func (c *Client) Ping() (time.Duration, string, error) {
 		return 0, "", err
 	}
 	req.Header.Set("User-Agent", c.userAgent)
-	if c.username != "" {
+	if c.jwtToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.jwtToken)
+	} else if c.username != "" {
 		req.SetBasicAuth(c.username, c.password)
 	}
 

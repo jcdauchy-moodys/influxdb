@@ -45,6 +45,7 @@ func main() {
 	fs.StringVar(&c.ClientConfig.UnixSocket, "socket", "", "Influxdb unix socket to connect to.")
 	fs.StringVar(&c.ClientConfig.Username, "username", "", "Username to connect to the server.")
 	fs.StringVar(&c.ClientConfig.Password, "password", "", `Password to connect to the server.  Leaving blank will prompt for password (--password="").`)
+	fs.StringVar(&c.ClientConfig.JWTToken, "jwt", "", "JWT token for authorization. Takes precedence over username/password.")
 	fs.StringVar(&c.Database, "database", c.Database, "Database to connect to the server.")
 	fs.Var(&c.Type, "type", "query language for executing commands or invoking the REPL: influxql, flux")
 	fs.BoolVar(&c.Ssl, "ssl", false, "Use https for connecting to cluster.")
@@ -80,6 +81,8 @@ func main() {
 			Password to connect to the server.  Leaving blank will prompt for password (--password '').
   -username 'username'
 			Username to connect to the server.
+  -jwt 'token'
+			JWT token for authorization. Takes precedence over username/password.
   -ssl
 			Use https for requests.
   -unsafeSsl
