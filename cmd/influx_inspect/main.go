@@ -15,6 +15,7 @@ import (
 	"github.com/influxdata/influxdb/cmd/influx_inspect/dumptsm"
 	"github.com/influxdata/influxdb/cmd/influx_inspect/dumptsmwal"
 	"github.com/influxdata/influxdb/cmd/influx_inspect/export"
+	"github.com/influxdata/influxdb/cmd/influx_inspect/exportparquet"
 	"github.com/influxdata/influxdb/cmd/influx_inspect/help"
 	"github.com/influxdata/influxdb/cmd/influx_inspect/report"
 	"github.com/influxdata/influxdb/cmd/influx_inspect/reportdisk"
@@ -95,6 +96,11 @@ func (m *Main) Run(args ...string) error {
 		name := export.NewCommand()
 		if err := name.Run(args...); err != nil {
 			return fmt.Errorf("export: %w", err)
+		}
+	case "export-parquet":
+		name := exportparquet.NewCommand()
+		if err := name.Run(args...); err != nil {
+			return fmt.Errorf("export-parquet: %w", err)
 		}
 	case "buildtsi":
 		name := buildtsi.NewCommand()

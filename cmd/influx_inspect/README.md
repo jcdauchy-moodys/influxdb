@@ -101,6 +101,47 @@ randset value=97.9296104805 1439856000000000000
 randset value=25.3849066842 1439856100000000000
 ```
 
+### `influx_inspect export-parquet`
+Exports TSM files to Apache Parquet format for use with analytical tools (Spark, Pandas, DuckDB, etc.). See [exportparquet/README.md](exportparquet/README.md) for detailed documentation.
+
+#### Quick Start
+
+Export entire database to Parquet format:
+```
+influx_inspect export-parquet --database mydb --output ./parquet-export
+```
+
+Dry run to preview schema:
+```
+influx_inspect export-parquet --database mydb --dry-run
+```
+
+Export with type resolution for conflicting field types:
+```
+influx_inspect export-parquet --database mydb --resolve-types "cpu.usage=float" --output ./parquet-export
+```
+
+#### Key Features
+
+- **Columnar Format**: Efficient storage and query performance
+- **Strong Typing**: Preserves InfluxDB field types (float, int, uint, bool, string)
+- **Schema Resolution**: Handles type conflicts and name clashes
+- **Metadata**: Includes database, retention policy, measurement info in file metadata
+- **Analytics Ready**: Direct compatibility with Apache Spark, Pandas, DuckDB, and other tools
+
+#### Use Cases
+
+Use `export-parquet` instead of `export` when:
+- Analyzing data with analytical tools (Spark, Pandas, DuckDB, etc.)
+- Need efficient columnar storage for large datasets
+- Require strong typing for downstream processing
+- Want to leverage Parquet's built-in compression
+
+Use `export` (line protocol) when:
+- Re-importing data back to InfluxDB
+- Need human-readable output
+- Want to preserve DDL statements
+
 # Caveats
 
 The system does not have access to the meta store when exporting TSM shards.  As such, it always creates the retention policy with infinite duration and replication factor of 1.

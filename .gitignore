@@ -83,3 +83,5 @@ man/*.1.gz
 # IDE files
 .idea/
 *.swp
+
+build-output/**

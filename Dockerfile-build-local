@@ -1,0 +1,103 @@
+ARG GOLANG_IMAGE=golang:1.23
+
+# Build binaries for debian influxdb
+FROM ${GOLANG_IMAGE} as go-builder
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    curl \
+    ca-certificates \
+    cmake \
+    make \
+    tar \
+    pkg-config \
+    clang protobuf-compiler libprotobuf-dev
+
+# Building this artifact
+ARG ARTIFACT_NAME=influxdb-binaries.tgz
+ARG INFLUXDB_VERSION=dev
+ARG BUILD_INFLUXD=true
+
+ENV OUTPUT_DIR=/output
+ENV TMPDIR=/tmp
+ENV ARTIFACT_DIR=/influxdb
+ENV INFLUXDB_VERSION=${INFLUXDB_VERSION}
+ENV BUILD_INFLUXD=${BUILD_INFLUXD}
+
+# Create working directory
+RUN mkdir -p /tmp/src
+
+WORKDIR /tmp/src
+
+# Copy only rust installation scripts and go.mod first (for better caching)
+COPY install-rust.sh rustup-init.sh go.mod go.sum ./
+
+# Installing rust (this layer will be cached unless these files change)
+RUN if [ -f install-rust.sh ]; then chmod a+x install-rust.sh && ./install-rust.sh; fi
+
+# Now copy the entire codebase
+COPY . /tmp/src/
+
+# Copy build files if they exist (otherwise use the ones from the codebase)
+# The Makefile-build should be used for building
+RUN if [ -f Makefile-build ]; then cp Makefile-build Makefile; fi
+
+# CacheBust - invalidate cache from here onwards (for source code changes)
+# Add a comment with timestamp or change this line to force rebuild from this point
+RUN echo "Cache bust point"
+
+# Build influxd binary (optional)
+RUN if [ "$BUILD_INFLUXD" = "true" ]; then \
+        echo "Building influxd binary" && \
+        export PATH="${HOME}/.cargo/bin:${PATH}" && \
+        export PKG_CONFIG=/tmp/src/pkg-config.sh && \
+        make influxd; \
+    else \
+        echo "Skipping influxd build (tools-only mode)"; \
+    fi
+
+# Build influx client binary
+RUN if [ "$BUILD_INFLUXD" = "true" ]; then \
+    echo "Building influx binary" && \
+    export PATH="${HOME}/.cargo/bin:${PATH}" && \
+    export PKG_CONFIG=/tmp/src/pkg-config.sh && \
+    make influx; \
+    else \
+        echo "Skipping influx build (tools-only mode)"; \
+    fi
+
+# Build influx_inspect binary (with parquet support using GO_BUILD_TOOLS)
+RUN echo "Building influx_inspect binary" && \
+    export PATH="${HOME}/.cargo/bin:${PATH}" && \
+    export PKG_CONFIG=/tmp/src/pkg-config.sh && \
+    make influx_inspect
+
+# Build influx_tools binary
+RUN echo "Building influx_tools binary" && \
+    export PATH="${HOME}/.cargo/bin:${PATH}" && \
+    export PKG_CONFIG=/tmp/src/pkg-config.sh && \
+    make influx_tools
+
+# Configuration files and preparing the packaging of the artifact
+RUN mkdir -p ${OUTPUT_DIR} ${ARTIFACT_DIR} && \
+    echo "Extracting influxdb binaries to ${ARTIFACT_DIR}" && \
+    echo "Copying binaries" && \
+    if [ "$BUILD_INFLUXD" = "true" ]; then \
+        cp -f /tmp/src/bin/linux/influxd ${ARTIFACT_DIR}/ || true; \
+        cp -f /tmp/src/bin/linux/influx ${ARTIFACT_DIR}/ || true; \
+    fi && \
+    cp -f /tmp/src/bin/linux/influx_inspect ${ARTIFACT_DIR}/ && \
+    cp -f /tmp/src/bin/linux/influx_tools ${ARTIFACT_DIR}/ && \
+    echo "Building tgz from directory ${ARTIFACT_DIR} to : ${OUTPUT_DIR}/${ARTIFACT_NAME}" && \
+    cd ${ARTIFACT_DIR} && \
+    tar czf ${OUTPUT_DIR}/${ARTIFACT_NAME} * && \
+    echo "Build complete! Artifacts:" && \
+    ls -lh ${OUTPUT_DIR}/${ARTIFACT_NAME}
+
+# Extract the binaries to /output for easy copying
+RUN cp -f /tmp/src/bin/linux/* ${OUTPUT_DIR}/ || true
+
